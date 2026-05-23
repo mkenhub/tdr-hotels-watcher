@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd (macOS) 用設定例
+
+  使い方:
+    1. このファイルを ~/Library/LaunchAgents/local.tdr.watcher.plist にコピー
+    2. WorkingDirectory と ProgramArguments のパスを実際の環境に合わせて編集
+    3. launchctl load ~/Library/LaunchAgents/local.tdr.watcher.plist
+    4. 確認: launchctl list | grep local.tdr.watcher
+    5. 停止: launchctl unload ~/Library/LaunchAgents/local.tdr.watcher.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.tdr.watcher</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/npm</string>
+    <string>run</string>
+    <string>check</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/yourname/work/disney-hotel-reservation</string>
+
+  <!-- 6時間ごとに実行 -->
+  <key>StartInterval</key>
+  <integer>21600</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/yourname/work/disney-hotel-reservation/logs/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/yourname/work/disney-hotel-reservation/logs/launchd.err.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

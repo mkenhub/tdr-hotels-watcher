@@ -1,0 +1,20 @@
+# docker compose で定期実行する場合の例
+# 単発実行: docker compose run --rm tdr-check
+#
+# 定期実行は cron か systemd timer から `docker compose run` を呼び出すのが
+# シンプルでオススメです (compose 自体には cron 機能がないため)
+
+services:
+  tdr-check:
+    build:
+      context: ../..
+      dockerfile: examples/docker/Dockerfile
+    volumes:
+      - ../../config.yaml:/app/config.yaml:ro
+      - ../../.env:/app/.env:ro
+      - ../../reports:/app/reports
+      - ../../logs:/app/logs
+    environment:
+      # .env から読まずに環境変数で渡す場合はこちら
+      # SMTP_PASSWORD: ${SMTP_PASSWORD}
+      TZ: Asia/Tokyo

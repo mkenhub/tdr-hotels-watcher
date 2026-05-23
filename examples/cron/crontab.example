@@ -1,0 +1,12 @@
+# crontab(5) 用設定例
+# `crontab -e` で開いた crontab に以下を追加してください
+#
+# 6時間ごとに実行 (00:00, 06:00, 12:00, 18:00)
+# パス指定は環境に合わせて書き換えてください
+0 */6 * * * cd /Users/yourname/work/disney-hotel-reservation && /usr/local/bin/npm run check >> logs/cron.log 2>&1
+
+# Tips:
+# - npm のフルパスは `which npm` で確認できます
+# - 環境変数が読み込まれず動かない場合は SHELL や PATH を crontab 内で明示してください
+#   SHELL=/bin/bash
+#   PATH=/usr/local/bin:/usr/bin:/bin
