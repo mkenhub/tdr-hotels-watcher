@@ -22,12 +22,14 @@ export async function fetchAll(config: Config, opts: FetchAllOptions = {}): Prom
   const browser = await chromium.launch({
     headless: config.fetch.headless,
     args: [
-      // ヘッドレス検出を回避する一般的なフラグ
       '--disable-blink-features=AutomationControlled',
       '--no-sandbox',
+      // ヘッドレス検出されるため headless: false で動かすが、ウィンドウを画面外に飛ばして
+      // 邪魔にならないようにする (ローカル実行時)
+      ...(config.fetch.headless ? [] : ['--window-position=-2400,-2400', '--window-size=1280,900']),
     ],
   });
-  log(`headless: ${config.fetch.headless}`);
+  log(`headless: ${config.fetch.headless}${config.fetch.headless ? '' : ' (ウィンドウは画面外配置)'}`);
   try {
     const queue = [...targetHotels];
     const concurrency = Math.min(config.fetch.concurrency, targetHotels.length || 1);
