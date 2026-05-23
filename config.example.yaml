@@ -1,0 +1,64 @@
+# TDR ホテル空き状況ウォッチャー 設定ファイル
+# config.yaml にコピーして編集してください (config.yaml は .gitignore 対象)
+
+# 検索条件
+search:
+  adults: 2                    # 18才以上 (1〜15)
+  children: []                 # 子どもなし (詳細形式は下記コメント参照)
+  rooms: 1                     # 部屋数 (1〜3、部屋タイプによっては上限変動あり)
+  nights: 1                    # 泊数 (1〜5、同上)
+
+# 子どもありの例:
+# search:
+#   adults: 2
+#   children:
+#     - age: '5'             # ChildAgeKey
+#       sleeping: with_bed   # co_sleep | with_bed
+#     - age: '6_preschool'
+#       sleeping: co_sleep
+#   rooms: 1
+#   nights: 1
+#
+# 使用できる age の値:
+#   '0' '1' '2' '3' '4' '5'
+#   '6_preschool' '6_elementary'
+#   '7' '8' '9' '10' '11'
+#   '12_elementary' '12_middle'
+#   '13_18_highschool'
+#
+# co_sleep (添い寝) は '12_middle' と '13_18_highschool' では選択不可
+
+# 取得設定
+fetch:
+  concurrency: 1               # 1 = 直列(推奨), 2-5 = 並列
+  waiting_room:
+    enabled: true
+    max_wait_minutes: 30
+  hotels:                      # 監視対象ホテル (省略時は全6)
+    - FSH                      # 東京ディズニーシー・ファンタジースプリングスホテル
+    - TDH                      # 東京ディズニーランドホテル
+    - DAH                      # ディズニーアンバサダーホテル
+    - DHM                      # 東京ディズニーシー・ホテルミラコスタ
+    - TSH                      # 東京ディズニーリゾート・トイ・ストーリーホテル
+    - DCH                      # 東京ディズニーセレブレーションホテル
+
+# メール送信
+smtp:
+  provider: gmail              # gmail | yahoo | outlook | icloud | other
+  from: your-address@gmail.com
+  to:
+    - your-email@example.com   # 複数指定可
+  subject_template: 'TDRホテル空き状況 {{date}} {{time}}'
+  # provider: other の場合のみ以下を追加で記述
+  # host: smtp.example.com
+  # port: 587
+  # secure: false
+
+# レポート出力
+report:
+  save_to_file: true
+  output_dir: ./reports
+
+# 異常時の挙動
+behavior:
+  notify_on_total_failure: false   # 1件もデータが取れなかった時にメールするか

@@ -1,0 +1,23 @@
+# Personal config and secrets (must never be committed)
+config.yaml
+config.yaml.bak.*
+.env
+
+# Generated reports and logs
+reports/
+logs/
+
+# Node
+node_modules/
+dist/
+
+# Playwright
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
