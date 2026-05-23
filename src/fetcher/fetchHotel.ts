@@ -41,6 +41,10 @@ export async function fetchHotel(
     await page
       .waitForSelector('a.js-callVacancyStatusSearch', { timeout: 60_000 })
       .catch(() => log('  ↳ 部屋リンク待機タイムアウト、続行を試みる'));
+    // TDR のJSハンドラ配線が完了するのを待つ (リンクが見えてもまだ click が無反応な期間がある)
+    log('  ↳ networkidle 待機 (最大30s)');
+    await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
+    await page.waitForTimeout(2_000);
 
     const roomLinkCount = await page.locator('a.js-callVacancyStatusSearch').count();
     log(`部屋タイプ: ${roomLinkCount}件`);
@@ -123,13 +127,15 @@ async function fetchRoomTypeCalendar(
   await link.scrollIntoViewIfNeeded();
   await link.click();
   await page.waitForSelector('#js-vacancyModal', { state: 'visible', timeout: 15_000 });
+  // モーダルが完全に描画される前に form 操作すると失敗するので少し待つ
+  await page.waitForSelector('#js-vacancyModal #adultNumVacancy', { timeout: 10_000 });
 
   // 検索条件を入力
   await fillSearchForm(page, opts.search);
 
-  // 「次へ」
-  await page.locator('a.next.js-conditionHide').click();
-  await page.waitForSelector('#boxCalendarSelect', { timeout: 15_000 });
+  // 「次へ」(モーダル内に限定して複数マッチを回避)
+  await page.locator('#js-vacancyModal a.next.js-conditionHide').first().click();
+  await page.waitForSelector('#js-vacancyModal #boxCalendarSelect', { timeout: 15_000 });
 
   // 表示可能な月を全列挙 (blankを除く)
   const monthValues = await page.$$eval('#boxCalendarSelect option', (opts) =>
@@ -157,26 +163,53 @@ async function fetchRoomTypeCalendar(
 }
 
 async function fillSearchForm(page: Page, search: SearchParams): Promise<void> {
+  // 大人は必須 (デフォルト0なので必ずセット)
   await page.selectOption('#adultNumVacancy', String(search.adults));
-  await page.selectOption('#childNumVacancy', String(search.children.length));
 
-  // 子どもの年齢・寝方を1人ずつ設定
-  for (let i = 0; i < search.children.length; i++) {
-    const child = search.children[i];
-    if (!child) continue;
-    const idx = i + 1; // TDR は1-based
-    const ageValue = CHILD_AGE_TDR_VALUE[child.age];
-    await page.selectOption(`select.hotelVacancyChildAge_${idx}`, ageValue);
-    // 寝方ラジオ。hiddenRadio クラスで非表示なので force:true
-    if (child.sleeping === 'co_sleep') {
-      await page.locator(`#hotelVacancy_lyingbed_${idx}`).check({ force: true });
-    } else {
-      await page.locator(`#hotelVacancy_bed_${idx}`).check({ force: true });
+  // 子ども数。0なら default のままで OK (changeイベントによる副作用回避)
+  if (search.children.length > 0) {
+    await page.selectOption('#childNumVacancy', String(search.children.length));
+    // 動的に追加される年齢/寝方フィールドが安定するまで少し待つ
+    await page
+      .waitForSelector(`select.hotelVacancyChildAge_${search.children.length}`, { timeout: 5_000 })
+      .catch(() => {});
+
+    for (let i = 0; i < search.children.length; i++) {
+      const child = search.children[i];
+      if (!child) continue;
+      const idx = i + 1; // TDR は1-based
+      const ageValue = CHILD_AGE_TDR_VALUE[child.age];
+      await page.selectOption(`select.hotelVacancyChildAge_${idx}`, ageValue);
+
+      // 寝方ラジオ。display:none で完全に非レイアウトなので evaluate で直接DOM操作
+      await page.evaluate(
+        ({ idx, sleep }: { idx: number; sleep: 'co_sleep' | 'with_bed' }) => {
+          const lying = document.getElementById(`hotelVacancy_lyingbed_${idx}`) as HTMLInputElement | null;
+          const bed = document.getElementById(`hotelVacancy_bed_${idx}`) as HTMLInputElement | null;
+          if (!lying || !bed) return;
+          if (sleep === 'co_sleep') {
+            lying.checked = true;
+            bed.checked = false;
+          } else {
+            bed.checked = true;
+            lying.checked = false;
+          }
+          // change イベントを伝搬させて TDR 側 JS のリアクションをトリガ
+          lying.dispatchEvent(new Event('change', { bubbles: true }));
+          bed.dispatchEvent(new Event('change', { bubbles: true }));
+        },
+        { idx, sleep: child.sleeping },
+      );
     }
   }
 
-  await page.selectOption('#roomsNumVacancy', String(search.rooms));
-  await page.selectOption('#stayDaysVacancy', String(search.nights));
+  // 部屋数・泊数は default が 1。1 と等しいなら set しない
+  if (search.rooms !== 1) {
+    await page.selectOption('#roomsNumVacancy', String(search.rooms));
+  }
+  if (search.nights !== 1) {
+    await page.selectOption('#stayDaysVacancy', String(search.nights));
+  }
 }
 
 async function closeModalIfOpen(page: Page): Promise<void> {

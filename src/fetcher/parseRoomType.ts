@@ -37,19 +37,20 @@ export function parseRoomTypeFromClasses(classAttr: string | null | undefined): 
     .split(/\s+/)
     .filter((c) => c.length > 0 && !KNOWN_NOISE_CLASSES.has(c));
 
-  if (meaningful.length < 2) {
-    throw new RoomTypeParseError(
-      `Expected at least 2 meaningful class tokens (area + roomType), got: ${meaningful.join(', ')}`,
-      classAttr,
-    );
+  if (meaningful.length === 0) {
+    throw new RoomTypeParseError('No meaningful class tokens found', classAttr);
+  }
+
+  // 1トークンの場合: area は空、roomTypeName = そのトークン
+  // (DCH等、エリア概念のないホテルでよくあるパターン)
+  // 2トークン以上: 最初のトークンをエリア名、残りを部屋タイプ名として結合
+  if (meaningful.length === 1) {
+    return { area: '', roomTypeName: meaningful[0] ?? '' };
   }
 
   const [area, ...rest] = meaningful;
-  if (area === undefined) {
-    throw new RoomTypeParseError('area not found', classAttr);
-  }
   return {
-    area,
+    area: area ?? '',
     roomTypeName: rest.join(' '),
   };
 }

@@ -73,7 +73,7 @@ function dayOfWeekFromTdClass(className: string): DayOfWeek {
 
 function parseDayState(td: Element, outerHTML: string): DayState {
   const className = td.className ?? '';
-  // 受付外 (outsideSaleDays)
+  // 受付外 (outsideSaleDays クラス)
   if (className.includes('outsideSaleDays')) {
     return { kind: 'out_of_period' };
   }
@@ -101,6 +101,11 @@ function parseDayState(td: Element, outerHTML: string): DayState {
   }
   if (src.includes('state_14')) {
     return { kind: 'full' };
+  }
+
+  // vMiddle + img なし: 「-」テキストや空セルの可能性 → out_of_period 扱い
+  if (ddClassName.split(/\s+/).includes('vMiddle') && !img) {
+    return { kind: 'out_of_period' };
   }
 
   throw new CalendarParseError(
