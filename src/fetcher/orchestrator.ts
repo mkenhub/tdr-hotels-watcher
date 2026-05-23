@@ -19,7 +19,15 @@ export async function fetchAll(config: Config, opts: FetchAllOptions = {}): Prom
   log(`対象ホテル: ${targetHotels.map((h) => h.code).join(', ')}`);
   log(`並列度: ${config.fetch.concurrency}`);
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: config.fetch.headless,
+    args: [
+      // ヘッドレス検出を回避する一般的なフラグ
+      '--disable-blink-features=AutomationControlled',
+      '--no-sandbox',
+    ],
+  });
+  log(`headless: ${config.fetch.headless}`);
   try {
     const queue = [...targetHotels];
     const concurrency = Math.min(config.fetch.concurrency, targetHotels.length || 1);

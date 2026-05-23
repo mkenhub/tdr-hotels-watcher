@@ -33,6 +33,9 @@ const FetchSchema = z.object({
   concurrency: z.number().int().min(1).max(5).default(1),
   waiting_room: WaitingRoomSchema.default({ enabled: true, max_wait_minutes: 30 }),
   hotels: z.array(HotelCodeSchema).min(1).default([...ALL_HOTEL_CODES]),
+  // ヘッドレスモード。TDRは現状headlessを検出してブロックするので、ローカルはfalse推奨。
+  // GH Actionsでは true + xvfb 等の対応が別途必要。
+  headless: z.boolean().default(false),
 });
 
 const SmtpProviderSchema = z.enum(['gmail', 'yahoo', 'outlook', 'icloud', 'other']);
@@ -69,6 +72,7 @@ export const ConfigSchema = z.object({
     concurrency: 1,
     waiting_room: { enabled: true, max_wait_minutes: 30 },
     hotels: [...ALL_HOTEL_CODES],
+    headless: false,
   }),
   smtp: SmtpSchema,
   report: ReportSchema.default({ save_to_file: true, output_dir: './reports' }),

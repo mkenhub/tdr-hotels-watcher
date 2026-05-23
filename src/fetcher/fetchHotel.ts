@@ -31,11 +31,16 @@ export async function fetchHotel(
 
   try {
     log(`navigate ${hotelDetailUrl(hotel.code)}`);
-    await page.goto(hotelDetailUrl(hotel.code), { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    // commit 待機: HTTP応答開始まで待つだけ。SPA内のXHR等で domcontentloaded が遅延しても進める
+    await page.goto(hotelDetailUrl(hotel.code), { waitUntil: 'commit', timeout: 120_000 });
     await handleWaitingRoom(page, {
       maxWaitMinutes: opts.waitingRoom.maxWaitMinutes,
       onWait: (elapsed) => log(`待機ページ中... ${Math.floor(elapsed / 1000)}s`),
     });
+    // 部屋リンクが描画されるまで明示的に待つ (網羅的な waitUntil より堅牢)
+    await page
+      .waitForSelector('a.js-callVacancyStatusSearch', { timeout: 60_000 })
+      .catch(() => log('  ↳ 部屋リンク待機タイムアウト、続行を試みる'));
 
     const roomLinkCount = await page.locator('a.js-callVacancyStatusSearch').count();
     log(`部屋タイプ: ${roomLinkCount}件`);
