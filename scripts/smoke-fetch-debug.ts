@@ -10,6 +10,8 @@ import type { SearchParams } from '../src/types.js';
 async function main() {
   const code = (process.argv[2] ?? 'DCH') as HotelCode;
   const noChildren = process.argv.includes('--no-children');
+  const maxArg = process.argv.find((a) => a.startsWith('--max='));
+  const maxRooms = maxArg ? Number(maxArg.slice('--max='.length)) : undefined;
   const hotel = HOTELS_BY_CODE[code];
   if (!hotel) {
     console.error(`Unknown hotel code: ${code}`);
@@ -48,6 +50,7 @@ async function main() {
     search,
     waitingRoom: { maxWaitMinutes: 5 },
     log: (m) => console.log(m),
+    ...(maxRooms !== undefined ? { maxRooms } : {}),
   });
   const elapsedSec = Math.floor((Date.now() - start) / 1000);
 

@@ -103,15 +103,20 @@ function parseDayState(td: Element, outerHTML: string): DayState {
     return { kind: 'full' };
   }
 
-  // vMiddle + img なし: 「-」テキストや空セルの可能性 → out_of_period 扱い
-  if (ddClassName.split(/\s+/).includes('vMiddle') && !img) {
+  // vMiddle はサイトのバリエーションで様々な意味を持つ。
+  // - vMiddle + outsideSaleDays td → out_of_period (上の分岐で処理済み)
+  // - vMiddle + state_14 img → full (上の分岐で処理済み)
+  // - vMiddle + img なし → out_of_period 扱い (「-」テキスト等)
+  // - vMiddle + 未知img → fail-open で out_of_period 扱い
+  if (ddClassName.split(/\s+/).includes('vMiddle')) {
     return { kind: 'out_of_period' };
   }
 
-  throw new CalendarParseError(
-    `Unknown cell state (no few/state_13/state_14): className="${ddClassName}", img.src="${src}"`,
-    outerHTML.slice(0, 400),
+  // ここまで来たら本当に未知のパターン。fail-open: out_of_period として続行 (ログのみ出す)
+  console.warn(
+    `[parseCalendar] unknown cell state, treating as out_of_period: className="${ddClassName}", img.src="${src}"`,
   );
+  return { kind: 'out_of_period' };
 }
 
 function parseRemaining(dd: Element, outerHTML: string): number {

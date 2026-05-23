@@ -18,6 +18,8 @@ export type FetchHotelOptions = {
   search: SearchParams;
   waitingRoom: { maxWaitMinutes: number };
   log: (msg: string) => void;
+  /** デバッグ用: 取得する部屋タイプ数の上限 */
+  maxRooms?: number;
 };
 
 export async function fetchHotel(
@@ -46,35 +48,48 @@ export async function fetchHotel(
     await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
     await page.waitForTimeout(2_000);
 
-    const roomLinkCount = await page.locator('a.js-callVacancyStatusSearch').count();
-    log(`部屋タイプ: ${roomLinkCount}件`);
+    // 全部屋のメタ情報 (class属性) を先に収集してから個別処理する。
+    // 個別処理時はページをリロードする (モーダル状態の蓄積を完全に避けるため)。
+    const allMetas = await page.$$eval('a.js-callVacancyStatusSearch', (links) =>
+      links.map((l) => ({ classAttr: l.getAttribute('class') })),
+    );
+    const roomMetas = opts.maxRooms !== undefined ? allMetas.slice(0, opts.maxRooms) : allMetas;
+    log(
+      `部屋タイプ: ${roomMetas.length}件${opts.maxRooms !== undefined ? ` (全${allMetas.length}件中、最初の${opts.maxRooms}件)` : ''}`,
+    );
 
     const roomSnapshots: RoomTypeSnapshot[] = [];
 
-    for (let i = 0; i < roomLinkCount; i++) {
-      const link = page.locator('a.js-callVacancyStatusSearch').nth(i);
+    for (let i = 0; i < roomMetas.length; i++) {
+      const meta = roomMetas[i];
+      if (!meta) continue;
+
       let area = '';
       let roomTypeName = '';
       try {
-        const cls = await link.getAttribute('class');
-        const info = parseRoomTypeFromClasses(cls);
+        const info = parseRoomTypeFromClasses(meta.classAttr);
         area = info.area;
         roomTypeName = info.roomTypeName;
       } catch (e) {
-        // class属性が異常なケース、その部屋タイプはスキップする
         roomSnapshots.push({
           hotelCode: hotel.code,
-          area: area || '(unknown area)',
-          roomTypeName: roomTypeName || '(unknown room)',
+          area: '(unknown area)',
+          roomTypeName: '(unknown room)',
           months: [],
           error: await classifyError(e),
         });
         continue;
       }
 
-      log(`[${i + 1}/${roomLinkCount}] ${area} / ${roomTypeName}`);
+      log(`[${i + 1}/${roomMetas.length}] ${area} / ${roomTypeName}`);
+
+      // 2部屋目以降はページをリロードして状態をリセット
+      if (i > 0) {
+        await reloadAndSettle(page, hotel.code, opts);
+      }
 
       try {
+        const link = page.locator('a.js-callVacancyStatusSearch').nth(i);
         const months = await fetchRoomTypeCalendar(page, link, opts);
         roomSnapshots.push({
           hotelCode: hotel.code,
@@ -84,7 +99,7 @@ export async function fetchHotel(
         });
       } catch (e) {
         const classified = await classifyError(e, page);
-        log(`  ↳ ERROR: ${classified.kind} ${classified.message.slice(0, 80)}`);
+        log(`  ↳ ERROR: ${classified.kind} ${classified.message.slice(0, 200)}`);
         roomSnapshots.push({
           hotelCode: hotel.code,
           area,
@@ -92,8 +107,6 @@ export async function fetchHotel(
           months: [],
           error: classified,
         });
-      } finally {
-        await closeModalIfOpen(page);
       }
     }
 
@@ -123,12 +136,9 @@ async function fetchRoomTypeCalendar(
   link: Locator,
   opts: FetchHotelOptions,
 ): Promise<CalendarMonth[]> {
-  // モーダルを開く
+  // モーダルを開く (リトライ付き: 初回click でハンドラ未配線等の場合がある)
   await link.scrollIntoViewIfNeeded();
-  await link.click();
-  await page.waitForSelector('#js-vacancyModal', { state: 'visible', timeout: 15_000 });
-  // モーダルが完全に描画される前に form 操作すると失敗するので少し待つ
-  await page.waitForSelector('#js-vacancyModal #adultNumVacancy', { timeout: 10_000 });
+  await openModalWithRetry(page, link);
 
   // 検索条件を入力
   await fillSearchForm(page, opts.search);
@@ -212,13 +222,80 @@ async function fillSearchForm(page: Page, search: SearchParams): Promise<void> {
   }
 }
 
-async function closeModalIfOpen(page: Page): Promise<void> {
-  const closeBtn = page.locator('.closeModal.vacancy').first();
-  if ((await closeBtn.count()) === 0) return;
-  if (!(await closeBtn.isVisible().catch(() => false))) return;
-  await closeBtn.click().catch(() => {});
-  // モーダルが完全に閉じるまで少し待つ
+/**
+ * ホテル詳細ページをリロードして JS 配線が完了するまで待つ。
+ * 部屋ごとにモーダル状態をリセットするため。
+ */
+async function reloadAndSettle(
+  page: Page,
+  hotelCode: string,
+  opts: FetchHotelOptions,
+): Promise<void> {
+  opts.log(`[worker-${opts.workerId}] ${hotelCode}   ↻ reload + settle`);
+  await page.goto(hotelDetailUrl(hotelCode as never), {
+    waitUntil: 'commit',
+    timeout: 120_000,
+  });
+  await handleWaitingRoom(page, { maxWaitMinutes: opts.waitingRoom.maxWaitMinutes });
   await page
-    .waitForSelector('#js-vacancyModal', { state: 'hidden', timeout: 5_000 })
+    .waitForSelector('a.js-callVacancyStatusSearch', { timeout: 60_000 })
     .catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
+  await page.waitForTimeout(2_000);
+}
+
+async function closeModalIfOpen(page: Page): Promise<void> {
+  // ×ボタンクリック → ダメなら Escape → ダメなら強制的に display:none
+  const closeBtn = page.locator('.closeModal.vacancy').first();
+  if ((await closeBtn.count()) > 0 && (await closeBtn.isVisible().catch(() => false))) {
+    await closeBtn.click().catch(() => {});
+  }
+  const closed = await page
+    .waitForSelector('#js-vacancyModal', { state: 'hidden', timeout: 3_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (closed) return;
+
+  // フォールバック1: Escape
+  await page.keyboard.press('Escape').catch(() => {});
+  const closed2 = await page
+    .waitForSelector('#js-vacancyModal', { state: 'hidden', timeout: 2_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (closed2) return;
+
+  // フォールバック2: JSで強制非表示
+  await page
+    .evaluate(() => {
+      const m = document.querySelector('#js-vacancyModal') as HTMLElement | null;
+      const overlay = document.querySelector('.modalOverlay.vacancy') as HTMLElement | null;
+      if (m) m.style.display = 'none';
+      if (overlay) overlay.style.display = 'none';
+    })
+    .catch(() => {});
+}
+
+/**
+ * モーダルを開く。初回click で開かない場合のリトライを内蔵。
+ * 「次の部屋へ移る時にクリックハンドラが一時的に未配線になる」現象に対応。
+ */
+async function openModalWithRetry(page: Page, link: import('playwright').Locator): Promise<void> {
+  const maxAttempts = 3;
+  let lastErr: Error | undefined;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await link.click();
+      await page.waitForSelector('#js-vacancyModal', { state: 'visible', timeout: 8_000 });
+      await page.waitForSelector('#js-vacancyModal #adultNumVacancy', { timeout: 8_000 });
+      return; // 成功
+    } catch (e) {
+      lastErr = e as Error;
+      if (attempt < maxAttempts) {
+        // 失敗時: いったんモーダルを閉じて、少し待ってから再試行
+        await closeModalIfOpen(page);
+        await page.waitForTimeout(1_500);
+      }
+    }
+  }
+  throw lastErr ?? new Error('Modal failed to open');
 }
