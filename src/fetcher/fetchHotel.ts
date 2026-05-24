@@ -124,6 +124,8 @@ export async function fetchHotel(
       // 戻るボタンだけだとモーダルオーバーレイ (.modalOverlay.vacancy) が残り、
       // 次の部屋リンククリックを intercept してしまう。
       await closeModalIfOpen(page).catch(() => {});
+      // モーダルクローズ後、TDR の JS が内部状態をリセットする時間を確保
+      await page.waitForTimeout(1_500);
     }
 
     return {
@@ -249,24 +251,56 @@ async function fillSearchForm(page: Page, search: SearchParams): Promise<void> {
 }
 
 async function closeModalIfOpen(page: Page): Promise<void> {
-  // ×ボタンクリック → ダメなら Escape → ダメなら強制的に display:none
+  // モーダル本体とオーバーレイの両方が hidden になるまで待つ。
+  // オーバーレイが残るとクリックを intercept して次の部屋への遷移が失敗する。
+  const isFullyClosed = async (): Promise<boolean> => {
+    const modalHidden = !(await page
+      .locator('#js-vacancyModal')
+      .isVisible()
+      .catch(() => false));
+    const overlayHidden = !(await page
+      .locator('.modalOverlay.vacancy')
+      .isVisible()
+      .catch(() => false));
+    return modalHidden && overlayHidden;
+  };
+
+  if (await isFullyClosed()) return;
+
+  // カレンダー表示状態で X を押すと、次回モーダル開時にカレンダー表示で出現する。
+  // 先に「戻る」でフォーム表示に切り替えてから X を押すことで、次回はフォーム表示になる。
+  const boxCalVisible = await page
+    .locator('#boxCalendarSelect')
+    .isVisible()
+    .catch(() => false);
+  if (boxCalVisible) {
+    const backBtn = page.locator('#js-vacancyModal a.btnBack.js-conditionShow').first();
+    if ((await backBtn.count()) > 0 && (await backBtn.isVisible().catch(() => false))) {
+      await backBtn.click().catch(() => {});
+      // フォーム表示に切り替わるまで少し待つ
+      await page
+        .waitForSelector('#js-vacancyModal #adultNumVacancy', { state: 'visible', timeout: 5_000 })
+        .catch(() => {});
+    }
+  }
+
+  // ×ボタンクリック
   const closeBtn = page.locator('.closeModal.vacancy').first();
   if ((await closeBtn.count()) > 0 && (await closeBtn.isVisible().catch(() => false))) {
     await closeBtn.click().catch(() => {});
   }
-  const closed = await page
-    .waitForSelector('#js-vacancyModal', { state: 'hidden', timeout: 3_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (closed) return;
+  // 両方が hidden になるまで polling
+  for (let i = 0; i < 30; i++) {
+    if (await isFullyClosed()) return;
+    await page.waitForTimeout(100);
+  }
 
-  // フォールバック1: Escape
+  // フォールバック: Escape
   await page.keyboard.press('Escape').catch(() => {});
-  const closed2 = await page
-    .waitForSelector('#js-vacancyModal', { state: 'hidden', timeout: 2_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (closed2) return;
+  for (let i = 0; i < 20; i++) {
+    if (await isFullyClosed()) return;
+    await page.waitForTimeout(100);
+  }
 
   // フォールバック2: JSで強制非表示
   await page
