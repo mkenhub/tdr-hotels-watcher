@@ -103,20 +103,28 @@ function parseDayState(td: Element, outerHTML: string): DayState {
     return { kind: 'full' };
   }
 
+  // スピナー (ico_spinner.gif) が残っている → fetcher 側の待機が不十分
+  if (src.includes('spinner')) {
+    throw new CalendarParseError(
+      `Calendar cell still showing loading spinner — fetcher should have waited longer for AJAX to complete`,
+      outerHTML.slice(0, 300),
+    );
+  }
+
   // vMiddle はサイトのバリエーションで様々な意味を持つ。
   // - vMiddle + outsideSaleDays td → out_of_period (上の分岐で処理済み)
   // - vMiddle + state_14 img → full (上の分岐で処理済み)
-  // - vMiddle + img なし → out_of_period 扱い (「-」テキスト等)
-  // - vMiddle + 未知img → fail-open で out_of_period 扱い
+  // - vMiddle + img なし or 未知 img → out_of_period 扱い (「-」表示等)
   if (ddClassName.split(/\s+/).includes('vMiddle')) {
     return { kind: 'out_of_period' };
   }
 
-  // ここまで来たら本当に未知のパターン。fail-open: out_of_period として続行 (ログのみ出す)
-  console.warn(
-    `[parseCalendar] unknown cell state, treating as out_of_period: className="${ddClassName}", img.src="${src}"`,
+  // ここまで来たら本当に未知のパターン。throw して呼び出し側で握りつぶしてもらう。
+  // (parser が情報を黙って捨てるよりは、上位で「この部屋は取得失敗」として記録する方が良い)
+  throw new CalendarParseError(
+    `Unknown cell state: className="${ddClassName}", img.src="${src}"`,
+    outerHTML.slice(0, 400),
   );
-  return { kind: 'out_of_period' };
 }
 
 function parseRemaining(dd: Element, outerHTML: string): number {

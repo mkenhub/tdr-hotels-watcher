@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CalendarParseError, parseCalendar } from '../src/fetcher/parseCalendar.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -101,14 +101,17 @@ describe('parseCalendar - エラー', () => {
     expect(() => parseCalendar('<table></table>', '2026,0')).toThrow(CalendarParseError);
   });
 
-  it('未知のセル状態は fail-open で out_of_period として扱う (console.warn)', () => {
+  it('未知のセル状態は CalendarParseError を投げる (上位で握りつぶす想定)', () => {
     const weird = wrapInTable(
       '<td class="td_0 cal_20260601"><dl><dt class="calendarDate">1</dt><dd class="calendarImage"><span>UNKNOWN</span></dd></dl></td>',
     );
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const result = parseCalendar(weird, '2026,6');
-    expect(result.days[0]?.state).toEqual({ kind: 'out_of_period' });
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(() => parseCalendar(weird, '2026,6')).toThrow(CalendarParseError);
+  });
+
+  it('スピナー (ローディング中) を検出したら専用エラーを投げる', () => {
+    const loading = wrapInTable(
+      '<td class="td_2 cal_20260701"><dl><dt class="calendarDate">1</dt><dd class="calendarImage"><span><img src="/cgp/images/jp/pc/ico/ico_spinner.gif" alt="loading"></span></dd></dl></td>',
+    );
+    expect(() => parseCalendar(loading, '2026,7')).toThrowError(/spinner|loading/i);
   });
 });

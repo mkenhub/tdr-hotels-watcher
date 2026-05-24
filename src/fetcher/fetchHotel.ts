@@ -155,12 +155,22 @@ async function fetchRoomTypeCalendar(
   const months: CalendarMonth[] = [];
   for (const monthValue of monthValues) {
     await page.selectOption('#boxCalendarSelect', monthValue);
-    // セルが描画されるまで待つ
+    // 月変更後はAJAXでカレンダーデータを取得する間、ico_spinner.gif が表示される。
+    // スピナーが全セルから消える (= 実データに置き換わる) まで待つ。
     await page
       .waitForFunction(
-        () => !!document.querySelector('table.vacancyCalTable td[class*="cal_"]'),
+        () => {
+          const cells = document.querySelectorAll(
+            'table.vacancyCalTable td[class*="cal_"]',
+          );
+          if (cells.length === 0) return false;
+          const hasSpinner = Array.from(cells).some((td) =>
+            td.querySelector('img[src*="spinner"]'),
+          );
+          return !hasSpinner;
+        },
         null,
-        { timeout: 15_000 },
+        { timeout: 30_000 },
       )
       .catch(() => {
         /* 全月が "受付外" だけのケースもあるためエラーは握りつぶす */
