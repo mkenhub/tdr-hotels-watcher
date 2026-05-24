@@ -40,9 +40,27 @@ export async function fetchHotel(
       onWait: (elapsed) => log(`待機ページ中... ${Math.floor(elapsed / 1000)}s`),
     });
     // 部屋リンクが描画されるまで明示的に待つ (網羅的な waitUntil より堅牢)
-    await page
+    const linkFound = await page
       .waitForSelector('a.js-callVacancyStatusSearch', { timeout: 60_000 })
-      .catch(() => log('  ↳ 部屋リンク待機タイムアウト、続行を試みる'));
+      .then(() => true)
+      .catch(() => false);
+    if (!linkFound) {
+      log('  ↳ 部屋リンク待機タイムアウト、続行を試みる');
+      // 診断: 現在のURL / title / body冒頭を出力 (Akamai/Cloudflareチャレンジ等を見える化)
+      const diag = await page
+        .evaluate(() => ({
+          url: location.href,
+          title: document.title,
+          bodyStart: (document.body?.innerText ?? '').replace(/\s+/g, ' ').slice(0, 400),
+          anyAnchorCount: document.querySelectorAll('a').length,
+        }))
+        .catch(() => null);
+      if (diag) {
+        log(`  ↳ diag url=${diag.url}`);
+        log(`  ↳ diag title=${diag.title}`);
+        log(`  ↳ diag anchors=${diag.anyAnchorCount} bodyStart="${diag.bodyStart}"`);
+      }
+    }
     // TDR のJSハンドラ配線が完了するのを待つ (リンクが見えてもまだ click が無反応な期間がある)
     log('  ↳ networkidle 待機 (最大30s)');
     await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
