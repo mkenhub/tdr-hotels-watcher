@@ -180,36 +180,45 @@ function renderHotel(r: HotelReport): string {
     `;
   }
   if (r.rooms.length === 0) {
-    // 空きなしのみのホテルは見出しだけ簡素に
     return `
-      <tr><td style="padding:24px 16px 0;">
-        <div style="font-size:18px;font-weight:bold;border-bottom:2px solid #bdbdbd;padding-bottom:6px;color:#666;">
-          🏨 ${escapeHtml(r.hotelName)}
+      <tr><td style="padding:16px 16px 0;">
+        <div style="font-size:16px;color:#666;border-bottom:1px solid #ddd;padding-bottom:6px;">
+          🏨 ${escapeHtml(r.hotelName)} <span style="font-size:13px;color:#999;">— 全部屋空きなし</span>
         </div>
-        <div style="margin-top:8px;color:#888;font-size:13px;">全部屋タイプ空きなし</div>
       </td></tr>
     `;
   }
+  // ホテル単位のアコーディオン (default 閉じる)
+  // 部屋数と「合計空き日数」をサマリーに表示してクリックを誘導
+  const roomsWithAvail = r.rooms.length;
+  const totalAvailDays = r.rooms.reduce((acc, rt) => acc + rt.entries.length, 0);
   return `
-    <tr><td style="padding:24px 16px 0;">
-      <div style="font-size:18px;font-weight:bold;border-bottom:2px solid #0d47a1;padding-bottom:6px;color:#0d47a1;">
-        🏨 ${escapeHtml(r.hotelName)}
-      </div>
-      ${r.rooms.map(renderRoomType).join('')}
+    <tr><td style="padding:16px 16px 0;">
+      <details style="border-bottom:2px solid #0d47a1;padding-bottom:8px;">
+        <summary style="font-size:18px;font-weight:bold;color:#0d47a1;cursor:pointer;padding:6px 0;list-style:none;">
+          ▶ 🏨 ${escapeHtml(r.hotelName)}
+          <span style="font-size:13px;font-weight:normal;color:#555;">— ${roomsWithAvail}部屋に空きあり (延べ ${totalAvailDays}日)</span>
+        </summary>
+        <div style="padding-top:8px;">
+          ${r.rooms.map(renderRoomType).join('')}
+        </div>
+      </details>
     </td></tr>
   `;
 }
 
 function renderRoomType(rt: RoomTypeReport): string {
+  const availDays = rt.entries.length;
   return `
-    <div style="margin-top:14px;">
-      <div style="font-weight:bold;color:#333;">
-        ▸ ${escapeHtml(rt.area)} ${escapeHtml(rt.roomTypeName)}
-      </div>
-      <table style="margin-top:6px;border-collapse:collapse;width:100%;">
+    <details style="margin-top:10px;border:1px solid #eee;border-radius:4px;background:#fafafa;">
+      <summary style="font-weight:bold;color:#333;cursor:pointer;padding:8px 12px;list-style:none;">
+        ▶ ${escapeHtml(rt.area)} ${escapeHtml(rt.roomTypeName)}
+        <span style="font-weight:normal;font-size:12px;color:#666;">— ${availDays}日空きあり</span>
+      </summary>
+      <table style="margin:0;border-collapse:collapse;width:100%;background:#fff;">
         ${rt.entries.map(renderEntry).join('')}
       </table>
-    </div>
+    </details>
   `;
 }
 
