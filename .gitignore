@@ -21,3 +21,6 @@ test-results/
 .vscode/
 .idea/
 *.swp
+
+# Claude Code session-local settings (user-specific permissions)
+.claude/

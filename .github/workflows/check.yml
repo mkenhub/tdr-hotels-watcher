@@ -17,7 +17,8 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # 全6ホテルで約1時間、Akamai キュー待機を含めて最大4時間で打ち切り
+    timeout-minutes: 240
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +43,11 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium --with-deps
 
+      - name: Install xvfb (for headed Chromium)
+        # TDR は TLS 層で headless Chromium を弾くため、ubuntu runner では
+        # xvfb で仮想ディスプレイを用意し headed モードで動かす
+        run: sudo apt-get install -y xvfb
+
       # config.yaml が repo に同梱されていなければ Secrets から書き出す
       # (public repo に個人情報を載せたくない場合に使う)
       - name: Prepare config.yaml
@@ -61,7 +67,8 @@ jobs:
       - name: Run check
         env:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-        run: npm run check
+        # xvfb-run で仮想ディスプレイ上で実行 (-a は空き番号を自動選択)
+        run: xvfb-run -a npm run check
 
       - name: Upload report artifact (always)
         if: always()
