@@ -140,7 +140,8 @@ function parseRemaining(dd: Element, outerHTML: string): number {
 function parsePrice(dd: Element, outerHTML: string): number {
   const em = dd.querySelector('em.minimumAmount');
   const text = em?.textContent?.trim() ?? '';
-  const digits = text.replace(/[円,\s]/g, '');
+  // 「~」「〜」「以上」「から」等の最低価格を示す装飾を除去してから数値化
+  const digits = text.replace(/[円,\s~〜]/g, '').replace(/以上|から/g, '');
   const n = Number(digits);
   if (!Number.isInteger(n) || n < 0) {
     throw new CalendarParseError(`Invalid price: "${text}"`, outerHTML.slice(0, 300));
