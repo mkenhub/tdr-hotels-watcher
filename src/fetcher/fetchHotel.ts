@@ -45,8 +45,9 @@ export async function fetchHotel(
       .then(() => true)
       .catch(() => false);
     if (!linkFound) {
-      log('  ↳ 部屋リンク待機タイムアウト、続行を試みる');
-      // 診断: 現在のURL / title / body冒頭を出力 (Akamai/Cloudflareチャレンジ等を見える化)
+      log('  ↳ 部屋リンク待機タイムアウト');
+      // 現状診断: Akamai が IP を data-center 判定して 403 (Access Denied) を返すケース、
+      // 待機ページ、その他何が出ているかを記録
       const diag = await page
         .evaluate(() => ({
           url: location.href,
@@ -59,6 +60,15 @@ export async function fetchHotel(
         log(`  ↳ diag url=${diag.url}`);
         log(`  ↳ diag title=${diag.title}`);
         log(`  ↳ diag anchors=${diag.anyAnchorCount} bodyStart="${diag.bodyStart}"`);
+        // Akamai の Access Denied は data center IP block。リトライしても通らないため即時 throw する。
+        if (
+          /Access Denied/i.test(diag.title) ||
+          /You don't have permission to access|errors\.edgesuite\.net/i.test(diag.bodyStart)
+        ) {
+          throw new Error(
+            `Akamai blocked this IP range (Access Denied). TDR rejects requests from data-center IPs. Run from a residential network or a self-hosted runner.`,
+          );
+        }
       }
     }
     // TDR のJSハンドラ配線が完了するのを待つ (リンクが見えてもまだ click が無反応な期間がある)
