@@ -3,7 +3,7 @@
 #
 # 6時間ごとに実行 (00:00, 06:00, 12:00, 18:00)
 # パス指定は環境に合わせて書き換えてください
-0 */6 * * * cd /Users/yourname/work/disney-hotel-reservation && /usr/local/bin/npm run check >> logs/cron.log 2>&1
+0 */6 * * * cd /Users/yourname/work/tdr-hotels-watcher && /usr/local/bin/npm run check >> logs/cron.log 2>&1
 
 # Tips:
 # - npm のフルパスは `which npm` で確認できます

@@ -30,8 +30,8 @@
 ## クイックスタート (ローカル実行)
 
 ```bash
-git clone https://github.com/mkenhub/disney-hotel-reservation.git
-cd disney-hotel-reservation
+git clone https://github.com/mkenhub/tdr-hotels-watcher.git
+cd tdr-hotels-watcher
 npm install
 npx playwright install chromium
 

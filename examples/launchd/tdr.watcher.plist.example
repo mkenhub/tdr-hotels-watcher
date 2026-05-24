@@ -23,16 +23,16 @@
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/yourname/work/disney-hotel-reservation</string>
+  <string>/Users/yourname/work/tdr-hotels-watcher</string>
 
   <!-- 6時間ごとに実行 -->
   <key>StartInterval</key>
   <integer>21600</integer>
 
   <key>StandardOutPath</key>
-  <string>/Users/yourname/work/disney-hotel-reservation/logs/launchd.out.log</string>
+  <string>/Users/yourname/work/tdr-hotels-watcher/logs/launchd.out.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/yourname/work/disney-hotel-reservation/logs/launchd.err.log</string>
+  <string>/Users/yourname/work/tdr-hotels-watcher/logs/launchd.err.log</string>
 
   <key>RunAtLoad</key>
   <false/>

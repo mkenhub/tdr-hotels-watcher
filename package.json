@@ -1,5 +1,5 @@
 {
-  "name": "disney-hotel-reservation",
+  "name": "tdr-hotels-watcher",
   "version": "0.1.0",
   "private": true,
   "description": "東京ディズニーリゾート(TDR)直営ホテルの予約状況を定期取得してメール通知するツール",

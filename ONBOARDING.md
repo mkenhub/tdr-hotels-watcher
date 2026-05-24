@@ -30,8 +30,8 @@ git --version  # 入っていれば OK
 ## 2. リポジトリを取得
 
 ```bash
-git clone https://github.com/mkenhub/disney-hotel-reservation.git
-cd disney-hotel-reservation
+git clone https://github.com/mkenhub/tdr-hotels-watcher.git
+cd tdr-hotels-watcher
 npm install
 ```
 

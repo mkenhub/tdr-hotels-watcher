@@ -67,7 +67,7 @@ config.yaml    HotelSnapshot[]   HTML string      "送信完了"
 ## 4. ディレクトリ構成
 
 ```
-disney-hotel-reservation/
+tdr-hotels-watcher/
 ├── README.md
 ├── package.json
 ├── tsconfig.json
@@ -761,8 +761,8 @@ async function withRetry<T>(
 ### 12.2 利用フロー (Quick Start)
 
 ```bash
-git clone https://github.com/<user>/disney-hotel-reservation.git
-cd disney-hotel-reservation
+git clone https://github.com/<user>/tdr-hotels-watcher.git
+cd tdr-hotels-watcher
 npm install
 npx playwright install chromium
 
