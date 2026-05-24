@@ -294,11 +294,64 @@ export type ClassifiedError =
 
 ### 6.5 待機ページ
 
-- TDRサイト全体が混雑時に「順番にご案内します」系の待機ページに遷移する
-- 検出ロジック: URL や特定文言の存在で判定する `isWaitingPage(page)` を実装
+- TDRサイト全体が混雑時に Akamai TVC の待機ページ (`reserve-q.tokyodisneyresort.jp`) に遷移する
+- 検出は **URL の `hostname` を `reserve.tokyodisneyresort.jp` と厳密一致比較** する。URL全体への正規表現は、待機ページの URL クエリパラメータ (`t=` パラメータ) に本来のURLがエンコードされて含まれるため誤マッチする
 - 自動更新で待機解除されるため、リロード不要。30秒ごとにページ状態を確認し、最大30分待機（設定で変更可能）
 
+### 6.6 月変更時の AJAX スピナー
+
+- `#boxCalendarSelect` で月を切り替えると、TDR は AJAX でその月のカレンダーデータを取得する
+- AJAX の応答が来るまで、全カレンダーセル (`td.cal_YYYYMMDD`) は `<img src="/cgp/images/jp/pc/ico/ico_spinner.gif">` でローディング表示になる
+- **このスピナー状態でHTMLを読むと全セルが「未知の状態」となり、パーサーが out_of_period 扱いで黙って捨ててしまう**
+- 待機条件: 「セルが存在し、かつ全セルからスピナー画像が消えた」まで waitForFunction で待つ (最大60秒)
+
+### 6.7 モーダルの状態保持の罠
+
+- TDRのモーダル (`#js-vacancyModal`) は、**最後にユーザーが見ていたサブビュー (フォーム / カレンダー) を記憶**する
+- 別の部屋リンクをクリックすると「現在の部屋」は新部屋にバインドされるが、**ビューは記憶された状態のまま**で開く
+  - 例: 部屋N の最後にカレンダーを見て X 閉じ → 部屋N+1 をクリック → モーダルはカレンダービューで開き、ヘッダーは部屋N+1の名前
+- これにより `#adultNumVacancy` が見えず selectOption がタイムアウトする
+- **対処**: モーダルを閉じる前に、まず「戻る」(`a.btnBack.js-conditionShow`) でフォームビューに切り替え、その後 X (`.closeModal.vacancy`) で完全に閉じる。これで次回のモーダル開時はフォームビューになる
+
+### 6.8 モーダルオーバーレイによるクリック intercept
+
+- モーダルが「開いている」状態 (戻るボタンで form view に戻しただけの状態を含む) では、画面全体を覆う `<div class="modalOverlay vacancy">` が `pointer-events: auto, z-index: 1100` で全クリックを intercept する
+- このため「戻るだけで X を押さない」運用は不可。**必ず X まで押してオーバーレイも消す**こと
+- どちらか片方しか押さないと、次の部屋リンクのクリックが届かず、Playwright 側で「element is visible but overlay intercepts pointer events」のエラーになる
+
+### 6.9 ヘッドレスモードのブロック
+
+- TDR は **TLS / HTTP/2 フィンガープリント層で headless Chromium をブロック** する
+- `headless: true` で接続すると HTTP 応答が一切返らず `ERR_TIMED_OUT` でタイムアウト (`headless: false` だと同じUA・同じ flags で問題なく接続できる)
+- そのため `config.fetch.headless` のデフォルトは `false`。GitHub Actions で動かす場合は xvfb-run など、Linux 環境用の headed 互換手段が別途必要 (TODO)
+
+### 6.10 ホテル詳細ページの JS 配線タイミング
+
+- `page.goto(url, { waitUntil: 'commit' })` 後、`a.js-callVacancyStatusSearch` リンク要素は早期 (約30秒) に DOM に出現するが、**TDR の JS クリックハンドラの配線が完了するまでさらに数十秒**かかる
+- 早すぎるクリックはハンドラが未配線でモーダルが開かない
+- 対処: `waitForLoadState('networkidle', { timeout: 30_000 })` + 固定 2秒 wait をナビゲーション直後に挟む。networkidle はタイムアウトしてもよい (TDRは XHR を継続的に吐く)
+
+### 6.11 部屋タイプリンクの class 属性パターン
+
+- ホテルごとに class トークン数が異なる
+  - DHM / FSH 等: `js-callVacancyStatusSearch <area> <roomType>` の3トークン以上 (area + roomType)
+  - DCH 等の単純なホテル: `js-callVacancyStatusSearch <roomType>` の2トークン (area無し)
+- パーサーは「最低1トークン」を許容し、1トークン時は area を空文字、2トークン以上は最初を area、残りを roomType として結合する
+
+### 6.12 部屋タイプ固有の人数/部屋数/泊数上限
+
+- ある部屋タイプの定員を超える検索条件で `次へ` を押すと、TDRエラー画面に「ご指定の人数では...」「人数の上限を超えて...」等が表示され、`#boxCalendarSelect` が出現しない
+- `classifyError` で「人数の上限を超えて」「ご指定の人数では」「定員を超えています」のような **動詞句** にマッチしたら `guest_limit_exceeded` と分類
+- 過去の `/定員/` のような単独語マッチは部屋名 (例: 「定員4名」) に含まれて誤判定するため不可
+
 ## 7. Fetcher の擬似コード
+
+> **注:** 以下は設計時点の擬似コードで、構造を示すもの。実装ではさらに以下の安全策が追加されている（詳細は §6.5〜6.12 を参照）:
+> - 月変更後に **スピナーが消えるまで待つ** (§6.6)
+> - モーダルを閉じる前に **戻る → X の順** でクリック (§6.7, 6.8)
+> - **ホテル詳細ページのJS配線完了待ち** (`networkidle` + 2秒固定wait) (§6.10)
+> - **部屋ごとに1回の自動リトライ** (失敗時はモーダルを完全に閉じてから再試行)
+> - リンクの class 属性が 1トークンしか含まない場合の **area 空文字フォールバック** (§6.11)
 
 ```ts
 async function fetchHotel(
@@ -536,13 +589,27 @@ function parseDayState(td: Element): DayState {
 
 ### 8.4 出力先
 
-- **メール本文**: そのままインラインHTML
-- **ファイル保存**: `reports/YYYY-MM-DDTHH-MM-SS.html` にも書き出し（オフライン閲覧用、`config.report.save_to_file` で制御）
+- **メール本文**: `renderSummary(snapshot)` で生成した軽量サマリーHTML (~2-5KB、ホテルごとに1行)
+- **添付ファイル**: `render(snapshot)` で生成した詳細レポートHTML (アコーディオン付き、~数百KB) を `tdr-report-<timestamp>.html` として添付
+- **ファイル保存**: `reports/YYYY-MM-DDTHH-MM-SS.html` にも詳細レポートを書き出し（オフライン閲覧用、`config.report.save_to_file` で制御）
 
-### 8.5 テンプレートエンジン
+**この2層構成の理由:**
+- Gmail は本文サイズが ~102KB を超えると "Message clipped" でクリップする
+- Gmail は `<details>/<summary>` のインタラクティブな開閉動作を本文では無効化する (常に展開状態で表示)
+- 添付HTMLは Gmail でも普通にダウンロード可能で、ブラウザで開けば完全な機能性 (アコーディオン含む) を発揮する
 
-- Handlebars 採用（軽量、TS互換、ヘルパー登録が容易）
-- ヘルパー: `formatYearMonthDay(date)`, `formatPrice(jpy)`, `dayStateLabel(state)` 等
+### 8.5 アコーディオン (添付ファイル側)
+
+- ホテル単位・部屋タイプ単位の二重 `<details>` 構造
+- デフォルト閉じる、ユーザーが開きたい所だけ開く
+- サマリー部分には集計値 (「N部屋に空きあり (延べM日)」「N日空きあり」) を表示
+- HTML5 標準なので JS 不要
+
+### 8.6 テンプレートエンジン
+
+- 当初は Handlebars を想定していたが、実装では **テンプレート文字列 + 純粋関数の組み合わせ** で十分シンプルに書けたため、外部テンプレートエンジン依存は導入していない
+- フォーマッタは `src/renderer/helpers.ts` に集約 (`formatYearMonthDay`, `formatPrice`, `dayStateLabel` 等)
+- HTML エスケープは `escapeHtml()` 関数を全テキスト挿入箇所に適用
 
 ## 9. config.yaml と初回ウィザード
 
