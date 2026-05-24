@@ -86,3 +86,27 @@ export function formatSearchSummary(
   const c = search.children.length;
   return `大人${search.adults}名 / 子ども${c}名 / ${search.nights}泊 / ${search.rooms}部屋`;
 }
+
+/**
+ * ClassifiedError.kind を人間向けの短いラベルに変換する。
+ * 実装詳細 (selector名、スタックトレース等) は隠す。
+ */
+export function formatErrorLabel(kind: string): string {
+  switch (kind) {
+    case 'guest_limit_exceeded':
+      return '人数上限超過';
+    case 'room_not_searchable':
+      return '検索条件不可';
+    case 'waiting_room_timeout':
+      return '待機ページから抜けられず';
+    case 'bot_detected':
+      return 'アクセス拒否 (bot判定)';
+    case 'navigation_timeout':
+      return 'ページ応答タイムアウト';
+    case 'parse_failure':
+      return 'HTML解析失敗';
+    case 'unknown':
+    default:
+      return '取得失敗';
+  }
+}

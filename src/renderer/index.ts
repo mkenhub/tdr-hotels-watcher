@@ -9,6 +9,7 @@ import {
   dayStateLabel,
   formatDate,
   formatDateTime,
+  formatErrorLabel,
   formatPrice,
   formatSearchSummary,
   isAvailableForReport,
@@ -61,7 +62,7 @@ export function renderSummary(snapshot: FullSnapshot): string {
 
   const hotelLines = reports.map((r) => {
     if (r.hotelError) {
-      return `<li style="color:#b71c1c;">🏨 ${escapeHtml(r.hotelName)} — ⚠️ 取得失敗 (${escapeHtml(r.hotelError.kind)})</li>`;
+      return `<li style="color:#b71c1c;">🏨 ${escapeHtml(r.hotelName)} — ⚠️ ${escapeHtml(formatErrorLabel(r.hotelError.kind))}</li>`;
     }
     const roomsWithAvail = r.rooms.length;
     if (roomsWithAvail === 0) {
@@ -73,11 +74,13 @@ export function renderSummary(snapshot: FullSnapshot): string {
   const errorLines: string[] = [];
   for (const r of reports) {
     if (r.hotelError) {
-      errorLines.push(`${r.hotelCode} (ホテル全体): ${r.hotelError.kind} — ${r.hotelError.message}`);
+      errorLines.push(`${r.hotelCode} (ホテル全体): ${formatErrorLabel(r.hotelError.kind)}`);
     }
     for (const rt of r.errorRooms) {
       if (rt.error) {
-        errorLines.push(`${r.hotelCode} ${rt.area} ${rt.roomTypeName}: ${rt.error.kind} — ${rt.error.message}`);
+        errorLines.push(
+          `${r.hotelCode} ${rt.area} ${rt.roomTypeName}: ${formatErrorLabel(rt.error.kind)}`,
+        );
       }
     }
   }
@@ -262,7 +265,7 @@ function renderHotel(r: HotelReport): string {
           🏨 ${escapeHtml(r.hotelName)}
         </div>
         <div style="margin-top:12px;padding:10px;background:#ffebee;border-radius:6px;color:#b71c1c;">
-          ⚠️ このホテルは取得に失敗しました: ${escapeHtml(r.hotelError.kind)} / ${escapeHtml(r.hotelError.message)}
+          ⚠️ このホテルは取得に失敗しました: ${escapeHtml(formatErrorLabel(r.hotelError.kind))}
         </div>
       </td></tr>
     `;
@@ -359,7 +362,7 @@ function renderErrors(reports: HotelReport[]): string {
         ${errors
           .map(
             (e) =>
-              `<li><strong>${escapeHtml(e.label)}</strong>: ${escapeHtml(e.err.kind)} — ${escapeHtml(e.err.message)}</li>`,
+              `<li><strong>${escapeHtml(e.label)}</strong>: ${escapeHtml(formatErrorLabel(e.err.kind))}</li>`,
           )
           .join('')}
       </ul>
