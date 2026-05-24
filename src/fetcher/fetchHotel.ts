@@ -83,7 +83,7 @@ export async function fetchHotel(
 
       log(`[${i + 1}/${roomMetas.length}] ${area} / ${roomTypeName}`);
 
-      // 1回失敗したらリトライ (モーダル状態リセット込み)
+      // 1回失敗したらリトライ (モーダル完全クローズ後に再試行)
       let months: CalendarMonth[] | null = null;
       let lastError: unknown;
       for (let attempt = 1; attempt <= 2; attempt++) {
@@ -95,7 +95,7 @@ export async function fetchHotel(
           lastError = e;
           if (attempt < 2) {
             log(`  ↳ ${attempt}回目失敗、リトライ`);
-            await ensureModalInFormView(page).catch(() => {});
+            await closeModalIfOpen(page).catch(() => {});
             await page.waitForTimeout(2_000);
           }
         }
@@ -120,8 +120,10 @@ export async function fetchHotel(
         });
       }
 
-      // 次の部屋へ遷移する前に、モーダルをフォーム表示に戻しておく
-      await ensureModalInFormView(page).catch(() => {});
+      // 次の部屋へ遷移する前に、モーダルを完全に閉じる (X クリック)。
+      // 戻るボタンだけだとモーダルオーバーレイ (.modalOverlay.vacancy) が残り、
+      // 次の部屋リンククリックを intercept してしまう。
+      await closeModalIfOpen(page).catch(() => {});
     }
 
     return {
@@ -243,31 +245,6 @@ async function fillSearchForm(page: Page, search: SearchParams): Promise<void> {
   }
   if (search.nights !== 1) {
     await page.selectOption('#stayDaysVacancy', String(search.nights));
-  }
-}
-
-/**
- * モーダルがカレンダー表示になっている場合、戻るボタンでフォーム表示に切り替える。
- * 次の部屋への遷移時に、TDR側がモーダルの最後の表示状態を覚えているため必要。
- */
-async function ensureModalInFormView(page: Page): Promise<void> {
-  // フォームのadult selectが見えていれば既にフォーム表示
-  const adultVisible = await page
-    .locator('#js-vacancyModal #adultNumVacancy')
-    .isVisible()
-    .catch(() => false);
-  if (adultVisible) return;
-
-  // カレンダー表示なら戻るをクリック
-  const backBtn = page.locator('#js-vacancyModal a.btnBack.js-conditionShow').first();
-  if ((await backBtn.count()) > 0 && (await backBtn.isVisible().catch(() => false))) {
-    await backBtn.click().catch(() => {});
-    await page
-      .waitForSelector('#js-vacancyModal #adultNumVacancy', {
-        state: 'visible',
-        timeout: 5_000,
-      })
-      .catch(() => {});
   }
 }
 
