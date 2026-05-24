@@ -83,22 +83,33 @@ export async function fetchHotel(
 
       log(`[${i + 1}/${roomMetas.length}] ${area} / ${roomTypeName}`);
 
-      // 2部屋目以降はページをリロードして状態をリセット
-      if (i > 0) {
-        await reloadAndSettle(page, hotel.code, opts);
+      // 1回失敗したらリトライ (モーダル状態リセット込み)
+      let months: CalendarMonth[] | null = null;
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const link = page.locator('a.js-callVacancyStatusSearch').nth(i);
+          months = await fetchRoomTypeCalendar(page, link, opts);
+          break;
+        } catch (e) {
+          lastError = e;
+          if (attempt < 2) {
+            log(`  ↳ ${attempt}回目失敗、リトライ`);
+            await ensureModalInFormView(page).catch(() => {});
+            await page.waitForTimeout(2_000);
+          }
+        }
       }
 
-      try {
-        const link = page.locator('a.js-callVacancyStatusSearch').nth(i);
-        const months = await fetchRoomTypeCalendar(page, link, opts);
+      if (months !== null) {
         roomSnapshots.push({
           hotelCode: hotel.code,
           area,
           roomTypeName,
           months,
         });
-      } catch (e) {
-        const classified = await classifyError(e, page);
+      } else {
+        const classified = await classifyError(lastError, page);
         log(`  ↳ ERROR: ${classified.kind} ${classified.message.slice(0, 200)}`);
         roomSnapshots.push({
           hotelCode: hotel.code,
@@ -108,6 +119,9 @@ export async function fetchHotel(
           error: classified,
         });
       }
+
+      // 次の部屋へ遷移する前に、モーダルをフォーム表示に戻しておく
+      await ensureModalInFormView(page).catch(() => {});
     }
 
     return {
@@ -170,7 +184,7 @@ async function fetchRoomTypeCalendar(
           return !hasSpinner;
         },
         null,
-        { timeout: 30_000 },
+        { timeout: 60_000 },
       )
       .catch(() => {
         /* 全月が "受付外" だけのケースもあるためエラーは握りつぶす */
@@ -233,25 +247,28 @@ async function fillSearchForm(page: Page, search: SearchParams): Promise<void> {
 }
 
 /**
- * ホテル詳細ページをリロードして JS 配線が完了するまで待つ。
- * 部屋ごとにモーダル状態をリセットするため。
+ * モーダルがカレンダー表示になっている場合、戻るボタンでフォーム表示に切り替える。
+ * 次の部屋への遷移時に、TDR側がモーダルの最後の表示状態を覚えているため必要。
  */
-async function reloadAndSettle(
-  page: Page,
-  hotelCode: string,
-  opts: FetchHotelOptions,
-): Promise<void> {
-  opts.log(`[worker-${opts.workerId}] ${hotelCode}   ↻ reload + settle`);
-  await page.goto(hotelDetailUrl(hotelCode as never), {
-    waitUntil: 'commit',
-    timeout: 120_000,
-  });
-  await handleWaitingRoom(page, { maxWaitMinutes: opts.waitingRoom.maxWaitMinutes });
-  await page
-    .waitForSelector('a.js-callVacancyStatusSearch', { timeout: 60_000 })
-    .catch(() => {});
-  await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
-  await page.waitForTimeout(2_000);
+async function ensureModalInFormView(page: Page): Promise<void> {
+  // フォームのadult selectが見えていれば既にフォーム表示
+  const adultVisible = await page
+    .locator('#js-vacancyModal #adultNumVacancy')
+    .isVisible()
+    .catch(() => false);
+  if (adultVisible) return;
+
+  // カレンダー表示なら戻るをクリック
+  const backBtn = page.locator('#js-vacancyModal a.btnBack.js-conditionShow').first();
+  if ((await backBtn.count()) > 0 && (await backBtn.isVisible().catch(() => false))) {
+    await backBtn.click().catch(() => {});
+    await page
+      .waitForSelector('#js-vacancyModal #adultNumVacancy', {
+        state: 'visible',
+        timeout: 5_000,
+      })
+      .catch(() => {});
+  }
 }
 
 async function closeModalIfOpen(page: Page): Promise<void> {
