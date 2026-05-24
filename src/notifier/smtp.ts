@@ -7,6 +7,8 @@ export type NotifyOptions = {
   htmlBody: string;
   fetchedAt: Date;
   smtpPassword: string;
+  /** 詳細HTMLレポートを添付ファイルとして同梱する場合 */
+  attachment?: { filename: string; content: string };
 };
 
 export async function sendMail(config: Config, opts: NotifyOptions): Promise<void> {
@@ -28,6 +30,17 @@ export async function sendMail(config: Config, opts: NotifyOptions): Promise<voi
     to: config.smtp.to.join(', '),
     subject,
     html: opts.htmlBody,
+    ...(opts.attachment
+      ? {
+          attachments: [
+            {
+              filename: opts.attachment.filename,
+              content: opts.attachment.content,
+              contentType: 'text/html; charset=utf-8',
+            },
+          ],
+        }
+      : {}),
   });
 }
 

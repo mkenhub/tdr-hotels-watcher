@@ -7,7 +7,7 @@ import {
   runWizard,
 } from './config/index.js';
 import { fetchAll } from './fetcher/index.js';
-import { render } from './renderer/index.js';
+import { render, renderSummary } from './renderer/index.js';
 import { sendMail } from './notifier/index.js';
 
 async function main(): Promise<void> {
@@ -48,11 +48,12 @@ async function main(): Promise<void> {
   log(`=== 取得完了: ${snapshot.hotels.length} ホテル ===`);
 
   const html = render(snapshot);
+  const summaryHtml = renderSummary(snapshot);
+  const stamp = isoStamp(snapshot.fetchedAt);
 
   if (config.report.save_to_file) {
     const outDir = resolve(cwd, config.report.output_dir);
     if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
-    const stamp = isoStamp(snapshot.fetchedAt);
     const outPath = resolve(outDir, `report-${stamp}.html`);
     writeFileSync(outPath, html, 'utf-8');
     log(`📄 レポートをファイル保存: ${outPath}`);
@@ -70,11 +71,15 @@ async function main(): Promise<void> {
   log(`📧 メール送信中... to=${config.smtp.to.join(', ')}`);
   try {
     await sendMail(config, {
-      htmlBody: html,
+      htmlBody: summaryHtml,
       fetchedAt: snapshot.fetchedAt,
       smtpPassword,
+      attachment: {
+        filename: `tdr-report-${stamp}.html`,
+        content: html,
+      },
     });
-    log('✓ メール送信完了');
+    log('✓ メール送信完了 (サマリー本文 + 詳細HTML添付)');
   } catch (e) {
     console.error(`❌ メール送信失敗: ${(e as Error).message}`);
     process.exit(2);

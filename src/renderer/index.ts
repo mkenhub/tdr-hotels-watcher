@@ -47,6 +47,81 @@ type HotelReport = {
   hotelError?: ClassifiedError;
 };
 
+/**
+ * メール本文用の軽量サマリー HTML。
+ * ホテルごとに「N部屋に空きあり (延べ M日)」を1行で表示するだけ。
+ * 詳細は添付HTMLレポートを参照してもらう想定。
+ */
+export function renderSummary(snapshot: FullSnapshot): string {
+  const reports = snapshot.hotels.map((h) => buildHotelReport(h));
+  const totalHotels = reports.length;
+  const hotelsWithAvailability = reports.filter((r) =>
+    r.rooms.some((rt) => rt.entries.length > 0),
+  ).length;
+
+  const hotelLines = reports.map((r) => {
+    if (r.hotelError) {
+      return `<li style="color:#b71c1c;">🏨 ${escapeHtml(r.hotelName)} — ⚠️ 取得失敗 (${escapeHtml(r.hotelError.kind)})</li>`;
+    }
+    const roomsWithAvail = r.rooms.length;
+    const totalAvailDays = r.rooms.reduce((acc, rt) => acc + rt.entries.length, 0);
+    if (roomsWithAvail === 0) {
+      return `<li style="color:#888;">🏨 ${escapeHtml(r.hotelName)} — 全部屋空きなし</li>`;
+    }
+    return `<li>🏨 <strong>${escapeHtml(r.hotelName)}</strong> — ${roomsWithAvail}部屋に空きあり (延べ ${totalAvailDays}日)</li>`;
+  });
+
+  const errorLines: string[] = [];
+  for (const r of reports) {
+    if (r.hotelError) {
+      errorLines.push(`${r.hotelCode} (ホテル全体): ${r.hotelError.kind} — ${r.hotelError.message}`);
+    }
+    for (const rt of r.errorRooms) {
+      if (rt.error) {
+        errorLines.push(`${r.hotelCode} ${rt.area} ${rt.roomTypeName}: ${rt.error.kind} — ${rt.error.message}`);
+      }
+    }
+  }
+
+  return `<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px 12px;background:#fafafa;font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;font-size:14px;color:#212121;">
+<table style="width:100%;max-width:680px;margin:0 auto;border-collapse:collapse;">
+  <tr><td style="padding:16px;">
+    <div style="font-size:22px;font-weight:bold;color:#0d47a1;">🏰 TDRホテル空き状況レポート</div>
+    <div style="margin-top:8px;color:#555;">
+      取得日時: ${formatDateTime(snapshot.fetchedAt)}<br>
+      検索条件: ${formatSearchSummary(snapshot.searchParams)}<br>
+      表示可能期間: ${snapshot.visibleMonthRange.from} 〜 ${snapshot.visibleMonthRange.to}
+    </div>
+    <div style="margin-top:16px;padding:12px;background:#e3f2fd;border-radius:6px;color:#0d47a1;">
+      📊 全${totalHotels}ホテル中 ${hotelsWithAvailability}ホテルに空きあり
+    </div>
+    <ul style="margin:16px 0 0;padding-left:20px;line-height:1.8;">
+      ${hotelLines.join('\n      ')}
+    </ul>
+    ${errorLines.length > 0 ? `
+      <div style="margin-top:24px;padding:12px;background:#ffebee;border-radius:6px;color:#b71c1c;">
+        <div style="font-weight:bold;">⚠️ 取得エラー (${errorLines.length}件)</div>
+        <ul style="margin:8px 0 0;padding-left:20px;font-size:13px;line-height:1.7;">
+          ${errorLines.map((e) => `<li>${escapeHtml(e)}</li>`).join('\n          ')}
+        </ul>
+      </div>
+    ` : ''}
+    <div style="margin-top:24px;padding:14px;background:#fff3e0;border-radius:6px;color:#e65100;">
+      📎 <strong>添付の HTML ファイル</strong>をブラウザで開くと、ホテル・部屋タイプ別の詳細カレンダー (空き日付一覧、価格付き) をアコーディオン形式で確認できます。
+    </div>
+    <div style="margin-top:24px;border-top:1px solid #eee;padding-top:14px;color:#888;font-size:12px;line-height:1.6;">
+      予約自体は <a href="https://reserve.tokyodisneyresort.jp/" style="color:#1976d2;">公式予約サイト</a> から行ってください。<br>
+      表示は available (○) と limited (残N) のみ。満室 (×) と受付外 (-) は省略しています。
+    </div>
+  </td></tr>
+</table>
+</body>
+</html>`;
+}
+
 export function render(snapshot: FullSnapshot): string {
   const reports = snapshot.hotels.map((h) => buildHotelReport(h));
   const totalHotels = reports.length;
