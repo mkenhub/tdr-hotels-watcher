@@ -150,6 +150,20 @@ function wrapDocument(body: string): string {
 <head>
 <meta charset="utf-8">
 <title>TDRホテル空き状況レポート</title>
+<style>
+  /* アコーディオン開閉時に三角アイコンを切り替える。
+     summary に list-style:none を付けて元のマーカーを消し、
+     ::before で自前の三角を出す。 */
+  details > summary::before {
+    content: '▶';
+    display: inline-block;
+    margin-right: 6px;
+    transition: transform 0.15s ease;
+  }
+  details[open] > summary::before {
+    transform: rotate(90deg);
+  }
+</style>
 </head>
 <body style="margin:0;padding:24px 12px;background:#fafafa;">
 ${body}
@@ -269,7 +283,7 @@ function renderHotel(r: HotelReport): string {
     <tr><td style="padding:16px 16px 0;">
       <details style="border-bottom:2px solid #0d47a1;padding-bottom:8px;">
         <summary style="font-size:18px;font-weight:bold;color:#0d47a1;cursor:pointer;padding:6px 0;list-style:none;">
-          ▶ 🏨 ${escapeHtml(r.hotelName)}
+          🏨 ${escapeHtml(r.hotelName)}
           <span style="font-size:13px;font-weight:normal;color:#555;">— ${roomsWithAvail}部屋に空きあり</span>
         </summary>
         <div style="padding-top:8px;">
@@ -285,7 +299,7 @@ function renderRoomType(rt: RoomTypeReport): string {
   return `
     <details style="margin-top:10px;border:1px solid #eee;border-radius:4px;background:#fafafa;">
       <summary style="font-weight:bold;color:#333;cursor:pointer;padding:8px 12px;list-style:none;">
-        ▶ ${escapeHtml(rt.area)} ${escapeHtml(rt.roomTypeName)}
+        ${escapeHtml(rt.area)} ${escapeHtml(rt.roomTypeName)}
         <span style="font-weight:normal;font-size:12px;color:#666;">— ${availDays}日空きあり</span>
       </summary>
       <table style="margin:0;border-collapse:collapse;width:100%;background:#fff;">
