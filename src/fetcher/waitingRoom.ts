@@ -10,9 +10,16 @@ import type { Page } from 'playwright';
  */
 export async function isWaitingPage(page: Page): Promise<boolean> {
   const url = page.url();
-  if (/queue|waiting|wr\.|virtual-waiting/i.test(url)) return true;
-  if (!/reserve\.tokyodisneyresort\.jp/.test(url)) {
-    // 全く別のドメインに飛ばされたら待機ページの可能性が高い
+  // ホスト名で判定 (クエリパラメータに本来のURLがエンコードされて含まれることがあるため、
+  // URL全体に対する正規表現は誤検出する)
+  let hostname = '';
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    return true; // URL parse 失敗は異常状態
+  }
+  if (hostname !== 'reserve.tokyodisneyresort.jp') {
+    // 例: reserve-q.tokyodisneyresort.jp (Akamai TVC キュー)
     return true;
   }
 
