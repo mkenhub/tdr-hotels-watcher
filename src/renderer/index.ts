@@ -64,11 +64,10 @@ export function renderSummary(snapshot: FullSnapshot): string {
       return `<li style="color:#b71c1c;">🏨 ${escapeHtml(r.hotelName)} — ⚠️ 取得失敗 (${escapeHtml(r.hotelError.kind)})</li>`;
     }
     const roomsWithAvail = r.rooms.length;
-    const totalAvailDays = r.rooms.reduce((acc, rt) => acc + rt.entries.length, 0);
     if (roomsWithAvail === 0) {
       return `<li style="color:#888;">🏨 ${escapeHtml(r.hotelName)} — 全部屋空きなし</li>`;
     }
-    return `<li>🏨 <strong>${escapeHtml(r.hotelName)}</strong> — ${roomsWithAvail}部屋に空きあり (延べ ${totalAvailDays}日)</li>`;
+    return `<li>🏨 <strong>${escapeHtml(r.hotelName)}</strong> — ${roomsWithAvail}部屋に空きあり</li>`;
   });
 
   const errorLines: string[] = [];
@@ -264,15 +263,14 @@ function renderHotel(r: HotelReport): string {
     `;
   }
   // ホテル単位のアコーディオン (default 閉じる)
-  // 部屋数と「合計空き日数」をサマリーに表示してクリックを誘導
+  // 部屋数をサマリーに表示してクリックを誘導
   const roomsWithAvail = r.rooms.length;
-  const totalAvailDays = r.rooms.reduce((acc, rt) => acc + rt.entries.length, 0);
   return `
     <tr><td style="padding:16px 16px 0;">
       <details style="border-bottom:2px solid #0d47a1;padding-bottom:8px;">
         <summary style="font-size:18px;font-weight:bold;color:#0d47a1;cursor:pointer;padding:6px 0;list-style:none;">
           ▶ 🏨 ${escapeHtml(r.hotelName)}
-          <span style="font-size:13px;font-weight:normal;color:#555;">— ${roomsWithAvail}部屋に空きあり (延べ ${totalAvailDays}日)</span>
+          <span style="font-size:13px;font-weight:normal;color:#555;">— ${roomsWithAvail}部屋に空きあり</span>
         </summary>
         <div style="padding-top:8px;">
           ${r.rooms.map(renderRoomType).join('')}
