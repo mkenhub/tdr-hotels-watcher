@@ -176,17 +176,6 @@ headless: false
 
 ツール本体はスケジューラを内蔵していません。お好みの方法で `npm run check` を定期実行してください。
 
-### GitHub Actions
-
-`.github/workflows/check.yml` がリポジトリに同梱済み。
-
-1. GitHub 上のリポジトリ Settings → Secrets and variables → Actions
-2. `SMTP_PASSWORD` を新規追加 (上で発行したアプリパスワードを貼り付け)
-3. `config.yaml` の中身をそのまま `CONFIG_YAML` という名前で Secret に追加 (public repo に個人情報を残したくない場合のみ。private fork なら commit してもOK)
-4. Actions タブから手動キック、もしくは 6時間ごとの cron で自動実行
-
-⚠️ スケジュール実行はリポジトリが60日間アクティビティ無しだと自動的に無効化されます。たまにコミット or 手動キックを。
-
 ### macOS の launchd
 
 `examples/launchd/tdr.watcher.plist.example` を参考に。

@@ -3,7 +3,7 @@
 - 作成日: 2026-05-23
 - 対象: 東京ディズニーリゾート (TDR) 直営6ホテルの予約状況を定期取得し、HTMLレポートを生成してメール送信するツール
 - ライセンス想定: OSSとしてGitHub公開
-- 動作確認環境: GitHub Actions (作者運用)、ローカルcron/launchd/Docker でも動作可能
+- 動作確認環境: macOS / Linux のローカル cron / launchd / Docker (家庭・オフィス回線 IP 経由のみ動作)
 
 ## 1. ゴールと非ゴール
 
@@ -32,8 +32,8 @@
 ### 2.2 トリガー
 
 - ツール本体は `npm run check` という単一コマンドで1回分の取得＋通知を完結させる
-- 定期実行はツール外部（cron / launchd / GitHub Actions等）の責務
-- リポジトリには `.github/workflows/check.yml` を同梱し、Actions利用者がそのまま使える状態にする
+- 定期実行はツール外部（cron / launchd 等）の責務
+- 実行ホストは家庭・オフィス回線 IP が必要 (TDR は Akamai 経由で data-center IP を一律ブロック)
 
 ### 2.3 検索条件
 
@@ -124,15 +124,10 @@ tdr-hotels-watcher/
 │           ├── 2026-06-DHM-capitano-superior.html
 │           └── 2026-09-DHM-capitano-superior.html
 │
-├── examples/
-│   ├── github-actions/check.yml.example
-│   ├── cron/crontab.example
-│   ├── launchd/tdr.watcher.plist.example
-│   └── docker/{Dockerfile,docker-compose.yml.example}
-│
-└── .github/
-    └── workflows/
-        └── check.yml           # 動作する状態で同梱 (作者運用環境)
+└── examples/
+    ├── cron/crontab.example
+    ├── launchd/tdr.watcher.plist.example
+    └── docker/{Dockerfile,docker-compose.yml.example}
 ```
 
 ### 4.1 設計上の規約
@@ -319,11 +314,12 @@ export type ClassifiedError =
 - このため「戻るだけで X を押さない」運用は不可。**必ず X まで押してオーバーレイも消す**こと
 - どちらか片方しか押さないと、次の部屋リンクのクリックが届かず、Playwright 側で「element is visible but overlay intercepts pointer events」のエラーになる
 
-### 6.9 ヘッドレスモードのブロック
+### 6.9 ヘッドレスモードと data-center IP のブロック
 
 - TDR は **TLS / HTTP/2 フィンガープリント層で headless Chromium をブロック** する
 - `headless: true` で接続すると HTTP 応答が一切返らず `ERR_TIMED_OUT` でタイムアウト (`headless: false` だと同じUA・同じ flags で問題なく接続できる)
-- そのため `config.fetch.headless` のデフォルトは `false`。GitHub Actions で動かす場合は xvfb-run など、Linux 環境用の headed 互換手段が別途必要 (TODO)
+- そのため `config.fetch.headless` のデフォルトは `false`
+- さらに **接続元 IP が data-center 帯 (AWS / GCP / Azure / 主要 CI ホスティング) だと Akamai が 403 Access Denied** を返す。家庭・オフィス回線の ISP 経由でしか実用にならない
 
 ### 6.10 ホテル詳細ページの JS 配線タイミング
 
@@ -727,7 +723,7 @@ async function withRetry<T>(
 
 ### 10.3 ログ戦略
 
-- 標準出力: `[worker-1] DHM トスカーナ・サイド スーペリアルーム 取得開始` 形式 (GH Actions ログで追跡可能)
+- 標準出力: `[worker-1] DHM トスカーナ・サイド スーペリアルーム 取得開始` 形式
 - ファイル出力: `logs/run-YYYY-MM-DDTHH-MM-SS.log` に詳細
 - パースエラー時: `logs/parse-failures/` にHTMLスニペット保存（後で fixture として再利用可能）
 
@@ -756,7 +752,6 @@ async function withRetry<T>(
 
 - `config.example.yaml` と `.env.example` を同梱、本物の `config.yaml` / `.env` は `.gitignore`
 - `examples/` ディレクトリに各環境向けのスケジューラ設定例を同梱
-- `.github/workflows/check.yml` は **作者の運用環境で動作する状態** で同梱
 
 ### 12.2 利用フロー (Quick Start)
 
@@ -770,21 +765,16 @@ npx playwright install chromium
 npm run check
 ```
 
-### 12.3 GitHub Actions での運用
-
-- `.github/workflows/check.yml` は cron (例: 6時間ごと) + workflow_dispatch (手動実行) を設定
-- Secrets に `SMTP_PASSWORD` を登録 (それ以外の設定は `config.yaml` 経由)
-- 注意: スケジュール実行はリポジトリ非アクティブ60日で自動停止する仕様があるため、定期的な手動キックや空コミットで回避
-
-### 12.4 想定動作環境
+### 12.3 想定動作環境
 
 | 環境 | サポート状況 |
 |---|---|
-| GitHub Actions (ubuntu-latest) | 作者運用予定環境 (workflow 同梱) |
-| macOS (cron / launchd) | examples 同梱、動作想定 |
+| macOS (cron / launchd) | 作者運用環境、examples 同梱 |
 | Linux (cron / systemd) | examples 同梱、動作想定 |
 | Windows (タスクスケジューラ) | examples 同梱、動作想定 |
-| Docker | examples 同梱、動作想定 |
+| Docker (家庭・オフィス回線 IP のみ) | examples 同梱、動作想定 |
+
+⚠️ クラウド (AWS / GCP / Azure 等) や CI ホスティング (GitHub Actions / CircleCI 等) の data-center IP は TDR の Akamai に 403 でブロックされるため動作しない。家庭・オフィスなど一般 ISP 経由でのみ動作する。
 
 ## 13. 非機能要件
 
@@ -795,7 +785,6 @@ npm run check
 | 1回あたり実行時間 (直列) | 全6ホテル巡回で 20〜40分（推定、待機ページ含めない理想ケース） |
 | 1回あたり実行時間 (並列3) | 10〜20分（推定、非ピーク時） |
 | メールサイズ | 50〜200KB（推定、空き表示のみフィルタ前提） |
-| GitHub Actions 利用枠 | public repoなら完全無料・無制限 |
 | 失敗率の許容範囲 | 個別ホテル失敗が10%以下、部分結果でもレポート送信できる構造を維持 |
 
 ## 14. 将来の拡張余地（初期スコープ外、設計に残す）

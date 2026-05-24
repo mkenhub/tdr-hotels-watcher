@@ -23,9 +23,9 @@
 
 ## 既知の制約
 
-- **実行時間**: 1ホテルあたり約50分〜1時間 (28部屋 × 5ヶ月、Akamaiキュー待ちを含む)。全6ホテルだと約3〜4時間
-- **GitHub Actions では `xvfb-run` 等の対応が別途必要** (CI環境では headless になりがちなため。TODO)
-- **メーラ内アコーディオン**: Gmailは `<details>` のインタラクティブ動作を本文では無効化する。詳細を見たい時は添付HTMLをブラウザで開く
+- **実行時間**: 1ホテルあたり約 10〜15分 (28部屋 × 5ヶ月、Akamaiキュー待ちを含む)。全6ホテルだと約 1〜2時間
+- **TDR は data-center IP からのアクセスを Akamai でブロック** している。実行するマシンは家庭/オフィス回線などの一般的な ISP 経由が必要。クラウド (AWS/GCP/Azure 等) や CI ホスティングからは Access Denied になる
+- **メーラ内アコーディオン**: Gmail は `<details>` のインタラクティブ動作を本文では無効化する。詳細を見たい時は添付HTMLをブラウザで開く
 
 ## クイックスタート (ローカル実行)
 
@@ -85,23 +85,17 @@ smtp:
 
 ツール本体はスケジューラを内蔵しません。お好みの方法で `npm run check` を定期実行してください。
 
-### GitHub Actions (作者の運用環境)
+### macOS
 
-`.github/workflows/check.yml` を同梱しており、リポジトリにそのまま乗せるだけで動きます。
+`examples/launchd/tdr.watcher.plist.example` (launchd) もしくは `examples/cron/crontab.example` を参考にしてください。
 
-1. GitHub Secrets に `SMTP_PASSWORD` を登録
-2. `config.yaml` を repo に commit するか (private repo 推奨)、`CONFIG_YAML` という Secret に YAML 文字列を入れる
-3. Actions タブから手動キック、または6時間ごとの cron で自動実行
+### Linux
 
-⚠️ スケジュール実行はリポジトリが60日間アクティブでないと自動的に無効化されます。コミット or 手動キックで定期的に活性を保ってください。
-
-### macOS の launchd / cron
-
-`examples/launchd/tdr.watcher.plist.example` か `examples/cron/crontab.example` を参考にしてください。
+`examples/cron/crontab.example` の `cd` パスを書き換えて使ってください。
 
 ### Docker
 
-`examples/docker/Dockerfile` と `docker-compose.yml.example` を同梱。
+`examples/docker/Dockerfile` と `docker-compose.yml.example` を同梱しています (ただしホスト側が data-center IP の場合 TDR にブロックされる点に注意)。
 
 ## 設計
 
